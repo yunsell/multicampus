@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.templating import Jinja2Templates
 from typing import Dict
 import time
@@ -28,6 +28,7 @@ templates = Jinja2Templates(directory="templates")
 @app.post("/chatgpt")
 async def chatgpt_api(request: Request):
     data = await request.json()
+    print("ChatGPT 시작 - ", data)
     prompt = data.get('prompt')
     keyword = data.get('keyword')
     YOUR_API_KEY = OPENAI_API_KEY
@@ -48,7 +49,12 @@ async def chatgpt_api(request: Request):
 
     end = time.time()
     sec = (end - start)
-    response_text = completion.choices[0].message.content
+    response_text = completion.choices[0].message.content if completion.choices else None
+
+    # 응답이 비어있으면 예외 처리
+    if not response_text:
+        raise HTTPException(status_code=500, detail="ChatGPT returned no content")
+
     return {"response": response_text, "time": round(sec, 4)}
 
 
@@ -84,18 +90,18 @@ class CompletionExecutor:
                         result = decoded_line
                         if result.startswith('data:'):
                             result = result[5:]
-                        print('************************')
-                        print(result)
                         data = json.loads(result)
                         text = data["message"]["content"]
                         counttokens = int(data["inputLength"]) + int(data["outputLength"])
                         print("#" * 50)
                         print("ClovaX: ", text)
                         return text, counttokens
+
 # ClovaX 엔드포인트
 @app.post("/clovax")
 async def clovax_api(request: Request):
     data = await request.json()
+    print("ClovaX 시작 - ", data)
     prompt = data.get('prompt')
     keyword = data.get('keyword')
 
@@ -126,12 +132,17 @@ async def clovax_api(request: Request):
     end = time.time()
     sec = (end - start)
     contents, tokken = completion_executor.execute(request_data)
+
+    if not contents:
+        raise HTTPException(status_code=500, detail="ClovaX returned no content")
+
     return {"response": contents, "tokens": tokken, "time": round(sec, 4)}
 
 # Gemini 엔드포인트
 @app.post("/gemini")
 async def gemini_api(request: Request):
     data = await request.json()
+    print("Gemini 시작 - ", data)
     prompt = data.get('prompt')
     keyword = data.get('keyword')
     YOUR_API_KEY = GEMINI_API_KEY
@@ -151,7 +162,45 @@ async def gemini_api(request: Request):
     )
     end = time.time()
     sec = (end - start)
+
+    if not response or not response.text:
+        raise HTTPException(status_code=500, detail="Gemini returned no content")
+
     return {"response": response.text, "time": round(sec, 4)}
+
+# 우선순위 로직: ChatGPT -> ClovaX -> Gemini
+@app.post("/fallback")
+async def fallback_api(request: Request):
+    # 요청 데이터 재추출 (같은 request를 재사용하기 위함)
+    data = await request.json()
+    print(data)
+    prompt = data.get('prompt')
+    keyword = data.get('keyword')
+
+    # 먼저 ChatGPT 호출 시도
+    try:
+        # ChatGPT 호출
+        # 새로운 request 생성 없이 동일한 데이터 사용을 위해 임시로 data를 다시 전달하는 예시
+        chatgpt_response = await chatgpt_api(request)
+        return chatgpt_response
+    except Exception as e:
+        print("ChatGPT call failed : ", e)
+
+    # ChatGPT 실패 시 ClovaX 호출
+    try:
+        clovax_response = await clovax_api(request)
+        return clovax_response
+    except Exception as e:
+        print("ClovaX call failed : ", e)
+
+    # ClovaX 실패 시 Gemini 호출
+    try:
+        gemini_response = await gemini_api(request)
+        return gemini_response
+    except Exception as e:
+        print("Gemini call failed : ", e)
+        # 모든 시도가 실패한 경우
+        raise HTTPException(status_code=500, detail="All providers failed")
 
 # 테스트 페이지 엔드포인트
 @app.get("/test")
