@@ -168,39 +168,26 @@ async def gemini_api(request: Request):
 
     return {"response": response.text, "time": round(sec, 4)}
 
+async def try_model_api(api_func, request):
+    try:
+        return await api_func(request)
+    except Exception as e:
+        print(f"{api_func.__name__} call failed: ", e)
+        return None
+
 # 우선순위 로직: ChatGPT -> ClovaX -> Gemini
 @app.post("/fallback")
 async def fallback_api(request: Request):
-    # 요청 데이터 재추출 (같은 request를 재사용하기 위함)
     data = await request.json()
-    print(data)
-    prompt = data.get('prompt')
-    keyword = data.get('keyword')
 
-    # 먼저 ChatGPT 호출 시도
-    try:
-        # ChatGPT 호출
-        # 새로운 request 생성 없이 동일한 데이터 사용을 위해 임시로 data를 다시 전달하는 예시
-        chatgpt_response = await chatgpt_api(request)
-        return chatgpt_response
-    except Exception as e:
-        print("ChatGPT call failed : ", e)
+    # ChatGPT → ClovaX → Gemini 순서 시도
+    for api_func in [chatgpt_api, clovax_api, gemini_api]:
+        result = await try_model_api(api_func, request)
+        if result is not None:
+            return result
 
-    # ChatGPT 실패 시 ClovaX 호출
-    try:
-        clovax_response = await clovax_api(request)
-        return clovax_response
-    except Exception as e:
-        print("ClovaX call failed : ", e)
-
-    # ClovaX 실패 시 Gemini 호출
-    try:
-        gemini_response = await gemini_api(request)
-        return gemini_response
-    except Exception as e:
-        print("Gemini call failed : ", e)
-        # 모든 시도가 실패한 경우
-        raise HTTPException(status_code=500, detail="All providers failed")
+    # 모두 실패한 경우
+    raise HTTPException(status_code=500, detail="All providers failed")
 
 # 테스트 페이지 엔드포인트
 @app.get("/test")

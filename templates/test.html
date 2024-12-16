@@ -1,127 +1,88 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>검색 결과 표시</title>
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+
+    <title>API Test Page</title>
     <style>
-        .header-container {
-            margin-top: 30px;
-            text-align: center;
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
         }
-        .search-container {
-            margin-top: 20px;
-            text-align: center;
+        form {
+            margin-bottom: 1rem;
         }
-        .search-box {
-            width: 300px;
-            margin-right: 10px;
-            vertical-align: middle; /* Ensure search box and button align */
+        label {
+            display: block;
+            margin: 0.5rem 0;
         }
-        .search-button {
-            vertical-align: middle; /* Ensure search box and button align */
+        textarea {
+            width: 100%;
+            height: 100px;
         }
-        .results-container {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 30px;
-            flex-wrap: wrap;
-        }
-        .result-box {
+        .result {
+            margin-top: 1rem;
+            padding: 1rem;
             border: 1px solid #ccc;
-            width: 30%;
-            max-height: 600px; /* Set a maximum height for scrolling */
-            overflow-y: auto;
-            text-align: left;
-            margin-bottom: 20px;
-            border-radius: 10px; /* Add rounded corners */
-            background-color: #f9f9f9; /* Light grey background */
-            position: relative;
+            white-space: pre-wrap;
         }
-        .result-title {
-            font-weight: bold;
-            font-size: 1.2em;
-            margin-bottom: 10px;
-            text-align: center;
-            border-bottom: 1px solid #ccc; /* Add a bottom border */
-            padding: 10px 0; /* Space between title and content */
-            background-color: #e9e9e9; /* Slightly darker grey for the title background */
-            border-radius: 10px 10px 0 0; /* Round the top corners */
-            position: sticky; /* Make the title sticky */
-            top: 0;
-            z-index: 1;
+        .spinner {
+            display: none;
+            margin-left: 10px;
         }
-        .result-content {
-            padding: 0 20px 20px 20px;
-            white-space: pre-wrap; /* Preserve whitespace and line breaks */
-        }
-        .result-box + .result-box {
-            margin-left: 20px;
+        .spinner.show {
+            display: inline-block;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="header-container">
-                <h1>인공지능 비교하기</h1>
-            </div>
-        </div>
-        <div class="row justify-content-center">
-            <div class="search-container">
-                <input type="text" id="prompt-input" class="form-control search-box d-inline-block" placeholder="프롬프트를 입력하세요">
-            </div>
-            <div class="search-container">
-                <input type="text" id="search-input" class="form-control search-box d-inline-block" placeholder="검색어를 입력하세요">
-                <button class="btn btn-primary search-button d-inline-block" onclick="performSearch()">검색</button>
-            </div>
-        </div>
-        <div class="row justify-content-center results-container">
-            <div class="result-box" id="result-box-1">
-                <div class="result-title">ChatGPT</div>
-                <div class="result-content"></div>
-            </div>
-            <div class="result-box" id="result-box-2">
-                <div class="result-title">ClovaX</div>
-                <div class="result-content"></div>
-            </div>
-            <div class="result-box" id="result-box-3">
-                <div class="result-title">Gemini</div>
-                <div class="result-content"></div>
-            </div>
-        </div>
-    </div>
+    <h1>Fallback API Test</h1>
+    <form id="testForm">
+        <label for="prompt">Prompt:</label>
+        <textarea id="prompt" name="prompt" required></textarea>
+
+        <label for="keyword">Keyword:</label>
+        <textarea id="keyword" name="keyword" required></textarea>
+
+        <button type="submit">Send</button>
+        <span class="spinner" id="spinner">Loading...</span>
+    </form>
+
+    <div class="result" id="result"></div>
+
+    <script>
+        const form = document.getElementById('testForm');
+        const resultDiv = document.getElementById('result');
+        const spinner = document.getElementById('spinner');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            spinner.classList.add('show');
+            resultDiv.textContent = '';
+
+            const prompt = document.getElementById('prompt').value;
+            const keyword = document.getElementById('keyword').value;
+
+            try {
+                const response = await fetch('/fallback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, keyword })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            } finally {
+                spinner.classList.remove('show');
+            }
+        });
+    </script>
 </body>
 </html>
-<script>
-        async function performSearch() {
-            const prompt = document.getElementById('prompt-input').value;
-            const keyword = document.getElementById('search-input').value;
-
-            // 결과 박스 초기화
-            document.querySelectorAll('.result-content').forEach(el => el.innerHTML = '검색 중...');
-
-            // 각 모델에 대한 요청
-            const models = ['chatgpt', 'clovax', 'gemini'];
-
-            models.forEach(async (model) => {
-                try {
-                    const response = await fetch(`/${model}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ prompt, keyword })
-                    });
-                    const data = await response.json();
-                    const resultBox = document.querySelector(`#result-box-${models.indexOf(model) + 1} .result-content`);
-                    resultBox.innerHTML = `<p>${data.response.replace(/\n/g, '<br>')}</p><p><strong>응답 시간:</strong> ${data.time} 초</p>`;
-                } catch (error) {
-                    console.error(`${model} 요청 중 오류 발생:`, error);
-                    const resultBox = document.querySelector(`#result-box-${models.indexOf(model) + 1} .result-content`);
-                    resultBox.innerHTML = '오류가 발생했습니다.';
-                }
-            });
-        }
-    </script>
